@@ -63,6 +63,39 @@ Schedules (last 20): ${JSON.stringify(schedules)}`;
     }
   };
 
+  const extractAndExecuteAction = async (text: string) => {
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return { isAction: false };
+      
+      const parsed = JSON.parse(jsonMatch[0]);
+      
+      if (parsed.action === 'create_order') {
+        const orderData = parsed.data;
+        const newId = `AI-${Math.floor(Math.random() * 10000)}`;
+        
+        const { error } = await supabase.from('orders').insert({
+          id: newId,
+          client: orderData.client || 'Невідомий клієнт',
+          address: orderData.address || 'Не вказано',
+          time: orderData.time || '',
+          order_type: orderData.order_type || 'Доставка',
+          status: 'NEW'
+        });
+
+        if (error) throw error;
+
+        return { 
+          isAction: true, 
+          message: `✅ Успішно створено (ID: ${newId})\n\n**Суть:** ${orderData.client}\n**Маршрут/Адреса:** ${orderData.address}\n**Дата:** ${orderData.time}\n**Тип:** ${orderData.order_type}`
+        };
+      }
+    } catch (err) {
+      console.error('Failed to parse or execute AI action', err);
+    }
+    return { isAction: false };
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
 
@@ -82,9 +115,24 @@ Schedules (last 20): ${JSON.stringify(schedules)}`;
       const context = await gatherContextData();
       
       // 2. Prepare prompt
-      const systemPrompt = `You are an AI Analytics Assistant for a stone manufacturing company (StonePlanner PLM). 
+      const systemPrompt = `You are an AI Analytics and Dispatcher Assistant for a stone manufacturing company (StonePlanner PLM). 
 You speak Ukrainian. You give short, precise, and analytical answers.
-Here is the current database context:
+
+IMPORTANT RULES FOR ACTIONS:
+If the user explicitly asks you to create an order or delivery (e.g., "створи доставку", "додай замовлення"), you MUST respond with ONLY a raw JSON object and nothing else.
+The JSON format must be EXACTLY:
+{
+  "action": "create_order",
+  "data": {
+    "client": "Name of client or short description (e.g. 'Доставка металоконструкцій')",
+    "address": "Address or route (e.g. 'з Гавела 16 на Васильків')",
+    "time": "Date and time extracted (e.g. '30.06')",
+    "order_type": "Доставка"
+  }
+}
+
+If no creation is requested, just answer normally in text. Do not output JSON if not creating something.
+Current database context:
 ${context}
 `;
 
@@ -103,11 +151,14 @@ ${context}
       if (!response.ok) throw new Error('AI request failed');
 
       const data = await response.json();
+      const aiText = data.response || '';
+
+      const actionResult = await extractAndExecuteAction(aiText);
 
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.response || 'Вибачте, не зміг згенерувати відповідь.',
+        content: actionResult.isAction ? actionResult.message : aiText,
         timestamp: new Date()
       };
 
