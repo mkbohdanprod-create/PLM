@@ -158,7 +158,7 @@ export function CreateOrderModal({ onClose, onSuccess }: CreateOrderModalProps) 
         address: formData.address || 'Не вказано',
         region: formData.region,
         material: formData.material,
-        orderType: formData.order_type,
+        orderType: formData.order_type as "По кресленню" | "З монтажем",
         area: formData.area || '',
         status: formData.status,
         time: 'Будь-коли',

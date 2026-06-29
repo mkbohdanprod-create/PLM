@@ -148,10 +148,9 @@ ${context}
         setMessages(prev => prev.map(m => m.id === aiMsgId ? { ...m, content: fullText } : m));
       }
 
-      // Check if the AI returned a JSON action command
       const actionResult = await extractAndExecuteAction(fullText);
-      if (actionResult.isAction) {
-        setMessages(prev => prev.map(m => m.id === aiMsgId ? { ...m, content: actionResult.message } : m));
+      if (actionResult.isAction && actionResult.message) {
+        setMessages(prev => prev.map(m => m.id === aiMsgId ? { ...m, content: actionResult.message as string } : m));
       }
 
     } catch (error) {
