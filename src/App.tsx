@@ -15,6 +15,7 @@ import { ScheduleEditor } from './components/ScheduleEditor';
 import { PayrollModule } from './components/PayrollModule';
 import { EmployeesModule } from './components/EmployeesModule';
 import { RolesModule } from './components/RolesModule';
+import { AIAssistantModule } from './components/AIAssistantModule';
 import { calculateRoute } from './utils/RouteCalculator';
 import { useAuth } from './contexts/AuthContext';
 import './index.css';
@@ -69,7 +70,8 @@ function App() {
     'Графіки роботи',
     'Розрахунок ЗП',
     'Співробітники',
-    'Налаштування ролей'
+    'Налаштування ролей',
+    'ШІ Аналітика'
   ];
 
   // Filter modules based on profile's allowed_modules
@@ -256,6 +258,9 @@ function App() {
                 {mod === 'Графіки роботи' && (
                   <div style={{ height: '1px', background: 'var(--border-color)', margin: '8px 24px' }} />
                 )}
+                {mod === 'ШІ Аналітика' && (
+                  <div style={{ height: '1px', background: 'var(--border-color)', margin: '8px 24px' }} />
+                )}
                 <div 
                   onClick={() => { setActiveModule(mod as any); setIsNavOpen(false); }}
                   style={{
@@ -383,6 +388,10 @@ function App() {
           ) : activeModule === 'Налаштування ролей' ? (
             <div style={{ height: '100%', overflow: 'auto', boxSizing: 'border-box' }}>
               <RolesModule />
+            </div>
+          ) : activeModule === 'ШІ Аналітика' ? (
+            <div style={{ height: '100%', overflow: 'auto', boxSizing: 'border-box' }}>
+              <AIAssistantModule />
             </div>
           ) : activeModule === 'Графіки роботи' ? (
             <ScheduleEditor schedules={schedules} setSchedules={setSchedules} />

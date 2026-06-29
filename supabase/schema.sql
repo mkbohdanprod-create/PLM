@@ -1,3 +1,12 @@
+-- Clean up previous schema if exists
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
+DROP TABLE IF EXISTS "schedules" CASCADE;
+DROP TABLE IF EXISTS "orders" CASCADE;
+DROP TABLE IF EXISTS "profiles" CASCADE;
+DROP TABLE IF EXISTS "roles" CASCADE;
+DROP TYPE IF EXISTS "order_status" CASCADE;
+
 -- Create custom types
 CREATE TYPE order_status AS ENUM (
   'DRAFT', 'NEW', 'MEASUREMENT_SCHEDULING', 'MEASUREMENT_SCHEDULED', 

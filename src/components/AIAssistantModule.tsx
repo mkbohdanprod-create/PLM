@@ -1,0 +1,208 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Bot, Send, BrainCircuit, Loader2, AlertCircle } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
+export function AIAssistantModule() {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      role: 'assistant',
+      content: 'Привіт! Я ваш ШІ-асистент. Я маю доступ до бази даних PLM (замовлення, графіки, співробітники). Що б ви хотіли проаналізувати сьогодні?',
+      timestamp: new Date()
+    }
+  ]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isAiConnected, setIsAiConnected] = useState<boolean | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // The AI endpoint will be provided via env or fallback to localhost (if using dev server)
+  const AI_URL = import.meta.env.VITE_AI_URL || 'http://localhost:11434';
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  useEffect(() => {
+    checkAiConnection();
+  }, []);
+
+  const checkAiConnection = async () => {
+    try {
+      // Check if Ollama is running
+      const res = await fetch(`${AI_URL}/api/tags`);
+      if (res.ok) {
+        setIsAiConnected(true);
+      } else {
+        setIsAiConnected(false);
+      }
+    } catch (err) {
+      setIsAiConnected(false);
+    }
+  };
+
+  const gatherContextData = async () => {
+    // Fetch limited context to not overflow AI token window
+    try {
+      const { data: orders } = await supabase.from('orders').select('id, client, status, region').limit(20);
+      const { data: schedules } = await supabase.from('schedules').select('date, shift, profile:profiles(name, specialty)').limit(20);
+      
+      return `Context Data:
+Orders (last 20): ${JSON.stringify(orders)}
+Schedules (last 20): ${JSON.stringify(schedules)}`;
+    } catch (err) {
+      console.error('Error fetching context', err);
+      return 'No context available.';
+    }
+  };
+
+  const handleSend = async () => {
+    if (!input.trim()) return;
+
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: input,
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, userMsg]);
+    setInput('');
+    setIsLoading(true);
+
+    try {
+      // 1. Gather real data from Supabase
+      const context = await gatherContextData();
+      
+      // 2. Prepare prompt
+      const systemPrompt = `You are an AI Analytics Assistant for a stone manufacturing company (StonePlanner PLM). 
+You speak Ukrainian. You give short, precise, and analytical answers.
+Here is the current database context:
+${context}
+`;
+
+      // 3. Send to local Ollama (Llama 3)
+      const response = await fetch(`${AI_URL}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'llama3', // or llama3.1
+          prompt: input,
+          system: systemPrompt,
+          stream: false
+        })
+      });
+
+      if (!response.ok) throw new Error('AI request failed');
+
+      const data = await response.json();
+
+      const aiMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: data.response || 'Вибачте, не зміг згенерувати відповідь.',
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, aiMsg]);
+    } catch (error) {
+      console.error('AI Error:', error);
+      const errMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: '❌ Помилка з\'єднання з локальним ШІ. Перевірте, чи запущено Ollama та тунель (або чи вказано правильний VITE_AI_URL).',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errMsg]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: '24px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', background: 'var(--bg-secondary)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexShrink: 0 }}>
+        <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <BrainCircuit size={28} style={{ color: 'var(--accent-color)' }} />
+          ШІ Аналітика
+        </h1>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: 'var(--bg-panel)', borderRadius: '20px', border: '1px solid var(--border-color)', fontSize: '13px', fontWeight: 600 }}>
+          {isAiConnected === null ? (
+            <><Loader2 size={14} className="spin" /> Перевірка зв'язку...</>
+          ) : isAiConnected ? (
+            <><div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success-color)' }} /> Локальний ШІ підключено</>
+          ) : (
+            <><AlertCircle size={14} color="var(--danger-color)" /> ШІ недоступний ({AI_URL})</>
+          )}
+        </div>
+      </div>
+
+      <div style={{ flex: 1, background: 'var(--bg-panel)', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        
+        {/* Chat Area */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {messages.map(msg => (
+            <div key={msg.id} style={{ display: 'flex', gap: '16px', flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: msg.role === 'user' ? 'var(--accent-color)' : 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid var(--border-color)' }}>
+                {msg.role === 'user' ? <span style={{ color: '#fff', fontSize: '14px', fontWeight: 600 }}>Ви</span> : <Bot size={20} color="var(--accent-color)" />}
+              </div>
+              <div style={{ maxWidth: '75%', background: msg.role === 'user' ? 'var(--accent-color)' : 'var(--bg-secondary)', color: msg.role === 'user' ? '#fff' : 'var(--text-primary)', padding: '16px', borderRadius: '12px', border: msg.role === 'user' ? 'none' : '1px solid var(--border-color)', fontSize: '15px', lineHeight: '1.5' }}>
+                <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '8px', textAlign: msg.role === 'user' ? 'right' : 'left' }}>
+                  {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            </div>
+          ))}
+          {isLoading && (
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)' }}>
+                <Bot size={20} color="var(--accent-color)" />
+              </div>
+              <div style={{ padding: '16px', borderRadius: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Loader2 size={16} className="spin" color="var(--accent-color)" />
+                <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Аналізує дані...</span>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input Area */}
+        <div style={{ padding: '16px 24px', background: 'var(--bg-secondary)', borderTop: '1px solid var(--border-color)' }}>
+          <form 
+            onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+            style={{ display: 'flex', gap: '12px', position: 'relative' }}
+          >
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Запитайте ШІ про замовлення, навантаження, чи попросіть пораду..."
+              style={{ flex: 1, padding: '16px 20px', borderRadius: '24px', border: '1px solid var(--border-color)', background: 'var(--bg-panel)', color: 'var(--text-primary)', fontSize: '15px', outline: 'none', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)' }}
+              disabled={isLoading}
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !input.trim()}
+              style={{ position: 'absolute', right: '8px', top: '8px', bottom: '8px', width: '40px', borderRadius: '50%', background: input.trim() && !isLoading ? 'var(--accent-color)' : 'var(--bg-secondary)', color: input.trim() && !isLoading ? '#fff' : 'var(--text-secondary)', border: 'none', cursor: input.trim() && !isLoading ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+            >
+              <Send size={18} style={{ marginLeft: '-2px' }} />
+            </button>
+          </form>
+          <div style={{ textAlign: 'center', marginTop: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+            ШІ обробляє дані локально і не відправляє їх третім особам. Відповіді можуть містити неточності.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
