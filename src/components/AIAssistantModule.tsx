@@ -139,7 +139,12 @@ ${context}
 
       const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", systemInstruction: systemPrompt });
 
-      const result = await model.generateContentStream(input);
+      const contents = [...messages.filter(m => m.id !== '1'), userMsg].map(m => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: m.content }]
+      }));
+
+      const result = await model.generateContentStream({ contents });
       let fullText = '';
 
       for await (const chunk of result.stream) {
