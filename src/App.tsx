@@ -18,6 +18,7 @@ import { RolesModule } from './components/RolesModule';
 import { AIAssistantModule } from './components/AIAssistantModule';
 import { calculateRoute } from './utils/RouteCalculator';
 import { useAuth } from './contexts/AuthContext';
+import { supabase } from './lib/supabase';
 import './index.css';
 
 function App() {
@@ -29,10 +30,24 @@ function App() {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   
   // Assignments: key is `${dateStr}_${measurerId}_${slotId}` or `eng_${engineerId}_${orderId}`
-  const [assignments, setAssignments] = useState<Record<string, Order>>({});
+  const [assignments, setAssignments] = useState<Record<string, Order>>(() => {
+    const saved = localStorage.getItem('stoneplanner_assignments');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  useEffect(() => {
+    localStorage.setItem('stoneplanner_assignments', JSON.stringify(assignments));
+  }, [assignments]);
   
-  // Schedules for employees
-  const [schedules, setSchedules] = useState<EmployeeSchedule[]>(INITIAL_SCHEDULE);
+  // Schedules for employees (Persisted to localStorage for the prototype)
+  const [schedules, setSchedules] = useState<EmployeeSchedule[]>(() => {
+    const saved = localStorage.getItem('stoneplanner_schedules');
+    return saved ? JSON.parse(saved) : INITIAL_SCHEDULE;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('stoneplanner_schedules', JSON.stringify(schedules));
+  }, [schedules]);
 
   const [activeDragOrder, setActiveDragOrder] = useState<Order | null>(null);
   
@@ -48,7 +63,7 @@ function App() {
   // Navigation Drawer State
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [isManagerSettingsOpen, setIsManagerSettingsOpen] = useState(false);
-  const [activeModule, setActiveModule] = useState<string>('Співробітники');
+  const [activeModule, setActiveModule] = useState<string>(localStorage.getItem('activeModule') || 'Планування замірів');
   const [engineeringPool, setEngineeringPool] = useState<string>('Конструктив');
   const [lockedAssignments, setLockedAssignments] = useState<Record<string, boolean>>({});
 
@@ -85,6 +100,11 @@ function App() {
     }
   }, [visibleModules, activeModule]);
 
+  // Persist active module
+  useEffect(() => {
+    localStorage.setItem('activeModule', activeModule);
+  }, [activeModule]);
+
   const dateStr = currentDate.toISOString().split('T')[0];
 
   useEffect(() => {
@@ -97,6 +117,57 @@ function App() {
       document.documentElement.setAttribute('data-theme', 'dark');
     }
   }, []);
+
+  // Fetch orders from Supabase
+  useEffect(() => {
+    if (!profile) return; // Wait until logged in
+
+    const fetchOrders = async () => {
+      const { data, error } = await supabase.from('orders').select('*');
+      if (!error && data) {
+        setOrders(data as Order[]);
+        if (data.length > 0) setSelectedOrder(data[0]);
+
+        if (data.length < 5) {
+          for (const order of MOCK_ORDERS) {
+            await supabase.from('orders').upsert({
+              id: order.id,
+              client: order.client,
+              address: order.address,
+              time: order.time,
+              status: order.status,
+              phone: order.phone || '',
+              area: order.area || '',
+              lat: order.lat,
+              lng: order.lng,
+              material: order.material,
+              region: order.region,
+              order_type: order.orderType || 'З монтажем',
+              is_subtask: order.isSubtask || false
+            }, { onConflict: 'id' });
+          }
+          const { data: newData } = await supabase.from('orders').select('*');
+          if (newData) {
+            setOrders(newData as Order[]);
+            setSelectedOrder(newData[0]);
+          }
+        }
+      }
+    };
+
+    fetchOrders();
+
+    // Subscribe to realtime changes
+    const subscription = supabase.channel('public:orders')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, payload => {
+        fetchOrders();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [profile]);
 
   // Recalculate routes when assignments on current date change
   useEffect(() => {
@@ -372,6 +443,11 @@ function App() {
               orders={availableOrders} 
               selectedOrder={selectedOrder} 
               onSelectOrder={setSelectedOrder} 
+              onAddOrder={(newOrder) => {
+                const updatedOrders = [newOrder, ...orders];
+                setOrders(updatedOrders);
+                setSelectedOrder(newOrder);
+              }}
             />
           )}
 
@@ -429,7 +505,7 @@ function App() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
                         <div style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '4px' }}>Картка замовлення</div>
-                        <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>{selectedOrder.id}</h2>
+                        <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>{selectedOrder?.id || 'Оберіть замовлення'}</h2>
                       </div>
                       <button style={{ padding: '6px' }}><MoreVertical size={16} /></button>
                     </div>
@@ -438,13 +514,13 @@ function App() {
                       <div>
                         <div className="detail-label">Клієнт</div>
                         <div className="detail-value">
-                          <User size={14} className="text-accent" /> {selectedOrder.client}
+                          <User size={14} className="text-accent" /> {selectedOrder?.client || '-'}
                         </div>
                       </div>
                       <div>
                         <div className="detail-label">Телефон</div>
                         <div className="detail-value">
-                          <Phone size={14} className="text-accent" /> {selectedOrder.phone}
+                          <Phone size={14} className="text-accent" /> {selectedOrder?.phone || '-'}
                         </div>
                       </div>
                       <div style={{ gridColumn: '1 / -1' }}>

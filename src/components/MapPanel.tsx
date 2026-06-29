@@ -35,11 +35,11 @@ export function MapPanel({ orders, selectedOrder, routeInfos, measurers, onSelec
       </div>
 
       <MapContainer 
-        center={[selectedOrder.lat, selectedOrder.lng]} 
+        center={[selectedOrder?.lat || 50.4501, selectedOrder?.lng || 30.5234]} 
         zoom={13} 
         style={{ width: '100%', height: '100%' }}
       >
-        <ChangeView center={[selectedOrder.lat, selectedOrder.lng]} />
+        <ChangeView center={[selectedOrder?.lat || 50.4501, selectedOrder?.lng || 30.5234]} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -60,12 +60,12 @@ export function MapPanel({ orders, selectedOrder, routeInfos, measurers, onSelec
         })}
 
         {/* Draw Markers */}
-        {orders.filter(o => o.status !== 'PAUSED' && o.status !== 'CANCELLED').map((order) => (
+        {orders.filter(o => o.status !== 'PAUSED' && o.status !== 'CANCELLED' && o.lat && o.lng).map((order) => (
           <Marker 
             key={order.id} 
             position={[order.lat, order.lng]}
-            opacity={order.id === selectedOrder.id ? 1 : 0.6}
-            zIndexOffset={order.id === selectedOrder.id ? 1000 : 0}
+            opacity={selectedOrder && order.id === selectedOrder.id ? 1 : 0.6}
+            zIndexOffset={selectedOrder && order.id === selectedOrder.id ? 1000 : 0}
             eventHandlers={{
               click: () => onSelectOrder(order),
             }}

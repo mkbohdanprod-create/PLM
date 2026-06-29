@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Search, MapPin, Clock } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { STATUS_LABELS } from '../types';
+import { CreateOrderModal } from './CreateOrderModal';
 import type { Order, OrderStatus } from '../types';
 
 export interface OrderCardProps {
@@ -56,15 +58,17 @@ export function DraggableOrderCard({ order, isSelected, onSelect }: OrderCardPro
   );
 }
 
-interface OrderSidebarProps {
+export interface OrderSidebarProps {
   orders: Order[];
-  selectedOrder: Order;
+  selectedOrder: Order | null;
   onSelectOrder: (order: Order) => void;
+  onAddOrder?: (order: Order) => void;
 }
 
-export function OrderSidebar({ orders, selectedOrder, onSelectOrder }: OrderSidebarProps) {
+export function OrderSidebar({ orders, selectedOrder, onSelectOrder, onAddOrder }: OrderSidebarProps) {
   const [activeTab, setActiveTab] = useState<OrderStatus | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { setNodeRef, isOver } = useDroppable({ id: 'backlog' });
 
   const measurementStatuses = ['NEW', 'PAUSED', 'MEASUREMENT_SCHEDULING', 'REMEASUREMENT_NEEDED'];
@@ -113,6 +117,15 @@ export function OrderSidebar({ orders, selectedOrder, onSelectOrder }: OrderSide
         />
       </div>
 
+      <div style={{ padding: '0 16px 12px' }}>
+        <button 
+          onClick={() => setIsCreateModalOpen(true)}
+          style={{ width: '100%', padding: '8px', background: 'var(--accent-color)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+        >
+          + Створити замовлення
+        </button>
+      </div>
+
       <div className="order-list">
         {filteredOrders.length === 0 ? (
           <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '20px 0' }}>
@@ -123,12 +136,26 @@ export function OrderSidebar({ orders, selectedOrder, onSelectOrder }: OrderSide
             <DraggableOrderCard 
               key={order.id} 
               order={order} 
-              isSelected={selectedOrder.id === order.id}
+              isSelected={selectedOrder?.id === order.id}
               onSelect={onSelectOrder}
             />
           ))
         )}
       </div>
+
+      {isCreateModalOpen && (
+        <CreateOrderModal 
+          onClose={() => setIsCreateModalOpen(false)} 
+          onSuccess={(newOrder) => {
+            setIsCreateModalOpen(false);
+            if (onAddOrder) {
+              onAddOrder(newOrder);
+            } else {
+              window.location.reload(); // fallback
+            }
+          }} 
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bot, Send, BrainCircuit, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface Message {
   id: string;
@@ -23,8 +24,8 @@ export function AIAssistantModule() {
   const [isAiConnected, setIsAiConnected] = useState<boolean | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // The AI endpoint will be provided via env or fallback to localhost (if using dev server)
-  const AI_URL = import.meta.env.VITE_AI_URL || 'http://localhost:11434';
+  const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -35,15 +36,9 @@ export function AIAssistantModule() {
   }, []);
 
   const checkAiConnection = async () => {
-    try {
-      // Check if Ollama is running
-      const res = await fetch(`${AI_URL}/api/tags`);
-      if (res.ok) {
-        setIsAiConnected(true);
-      } else {
-        setIsAiConnected(false);
-      }
-    } catch (err) {
+    if (GEMINI_API_KEY) {
+      setIsAiConnected(true);
+    } else {
       setIsAiConnected(false);
     }
   };
@@ -51,12 +46,17 @@ export function AIAssistantModule() {
   const gatherContextData = async () => {
     // Fetch limited context to not overflow AI token window
     try {
-      const { data: orders } = await supabase.from('orders').select('id, client, status, region').limit(20);
-      const { data: schedules } = await supabase.from('schedules').select('date, shift, profile:profiles(name, specialty)').limit(20);
+      const { data: orders } = await supabase.from('orders').select('id, client, address, status, order_type, time, area, material, region').limit(50);
+      
+      let schedules = [];
+      try {
+        const saved = localStorage.getItem('stoneplanner_schedules');
+        if (saved) schedules = JSON.parse(saved);
+      } catch (e) {}
       
       return `Context Data:
-Orders (last 20): ${JSON.stringify(orders)}
-Schedules (last 20): ${JSON.stringify(schedules)}`;
+Orders (last 50): ${JSON.stringify(orders)}
+Schedules (all local): ${JSON.stringify(schedules)}`;
     } catch (err) {
       console.error('Error fetching context', err);
       return 'No context available.';
@@ -114,61 +114,52 @@ Schedules (last 20): ${JSON.stringify(schedules)}`;
       // 1. Gather real data from Supabase
       const context = await gatherContextData();
       
-      // 2. Prepare prompt
-      const systemPrompt = `You are an AI Analytics and Dispatcher Assistant for a stone manufacturing company (StonePlanner PLM). 
-You speak Ukrainian. You give short, precise, and analytical answers.
+      const today = new Date().toISOString().split('T')[0];
+      const systemPrompt = `You are a strict, highly accurate AI Assistant for StonePlanner.
+CRITICAL RULES:
+1. YOU MUST ALWAYS REPLY IN UKRAINIAN LANGUAGE ONLY. NEVER USE ENGLISH.
+2. Today's date is ${today}.
+3. You have access to the Context Data below. You must ONLY use this data.
+4. If the user asks about schedules, employees, timesheets ("табелі", "графік", "хто працює", "замірники"), and the answer is NOT clearly in the "Schedules" context, YOU MUST SAY EXACTLY: "Вибачте, але в мене зараз немає доступу до графіків та табелів співробітників." Do NOT guess based on orders.
+5. If the user asks about an order not in the context, say: "Вибачте, я не знайшов інформацію про це в базі даних."
+6. Do not hallucinate. Answer precisely.
 
-IMPORTANT RULES FOR ACTIONS:
-If the user explicitly asks you to create an order or delivery (e.g., "створи доставку", "додай замовлення"), you MUST respond with ONLY a raw JSON object and nothing else.
-The JSON format must be EXACTLY:
-{
-  "action": "create_order",
-  "data": {
-    "client": "Name of client or short description (e.g. 'Доставка металоконструкцій')",
-    "address": "Address or route (e.g. 'з Гавела 16 на Васильків')",
-    "time": "Date and time extracted (e.g. '30.06')",
-    "order_type": "Доставка"
-  }
-}
-
-If no creation is requested, just answer normally in text. Do not output JSON if not creating something.
-Current database context:
+Context Data:
 ${context}
 `;
 
-      // 3. Send to local Ollama (Llama 3)
-      const response = await fetch(`${AI_URL}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'llama3', // or llama3.1
-          prompt: input,
-          system: systemPrompt,
-          stream: false
-        })
-      });
-
-      if (!response.ok) throw new Error('AI request failed');
-
-      const data = await response.json();
-      const aiText = data.response || '';
-
-      const actionResult = await extractAndExecuteAction(aiText);
-
-      const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
+      // 3. Send to Gemini
+      const aiMsgId = (Date.now() + 1).toString();
+      setMessages(prev => [...prev, {
+        id: aiMsgId,
         role: 'assistant',
-        content: actionResult.isAction ? actionResult.message : aiText,
+        content: '',
         timestamp: new Date()
-      };
+      }]);
 
-      setMessages(prev => [...prev, aiMsg]);
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash", systemInstruction: systemPrompt });
+
+      const result = await model.generateContentStream(input);
+      let fullText = '';
+
+      for await (const chunk of result.stream) {
+        const chunkText = chunk.text();
+        fullText += chunkText;
+        setMessages(prev => prev.map(m => m.id === aiMsgId ? { ...m, content: fullText } : m));
+      }
+
+      // Check if the AI returned a JSON action command
+      const actionResult = await extractAndExecuteAction(fullText);
+      if (actionResult.isAction) {
+        setMessages(prev => prev.map(m => m.id === aiMsgId ? { ...m, content: actionResult.message } : m));
+      }
+
     } catch (error) {
       console.error('AI Error:', error);
       const errMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: '❌ Помилка з\'єднання з локальним ШІ. Перевірте, чи запущено Ollama та тунель (або чи вказано правильний VITE_AI_URL).',
+        content: '❌ Помилка з\'єднання з Gemini. Перевірте, чи вказано правильний VITE_GEMINI_API_KEY у .env.local',
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errMsg]);
@@ -189,9 +180,9 @@ ${context}
           {isAiConnected === null ? (
             <><Loader2 size={14} className="spin" /> Перевірка зв'язку...</>
           ) : isAiConnected ? (
-            <><div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success-color)' }} /> Локальний ШІ підключено</>
+            <><div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success-color)' }} /> Gemini 2.5 Flash підключено</>
           ) : (
-            <><AlertCircle size={14} color="var(--danger-color)" /> ШІ недоступний ({AI_URL})</>
+            <><AlertCircle size={14} color="var(--danger-color)" /> ШІ недоступний (Введіть API ключ)</>
           )}
         </div>
       </div>
