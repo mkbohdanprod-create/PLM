@@ -1,0 +1,2 @@
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS shifts JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS assignment_key TEXT;

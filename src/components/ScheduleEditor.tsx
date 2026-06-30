@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Filter, Download, Copy, Calendar as CalendarIcon, Check, Settings, X, Edit3 } from 'lucide-react';
 import type { EmployeeSchedule, ShiftType } from '../types';
+import { supabase } from '../lib/supabase';
 
 
 
@@ -55,6 +56,11 @@ export function ScheduleEditor({ schedules, setSchedules }: ScheduleEditorProps)
   const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
   const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
 
+  const saveShiftsToDB = async (empId: string, newShifts: any) => {
+    const { error } = await supabase.from('employees').update({ shifts: newShifts }).eq('id', empId);
+    if (error) console.error('Error saving shifts:', error);
+  };
+
   const handleSetShift = (empId: string, dateStr: string, shift: ShiftType) => {
     setSchedules(prev => prev.map(emp => {
       if (emp.id !== empId) return emp;
@@ -64,6 +70,7 @@ export function ScheduleEditor({ schedules, setSchedules }: ScheduleEditorProps)
       } else {
         newShifts[dateStr] = shift;
       }
+      saveShiftsToDB(empId, newShifts);
       return { ...emp, shifts: newShifts };
     }));
     setActiveCell(null);
@@ -93,6 +100,7 @@ export function ScheduleEditor({ schedules, setSchedules }: ScheduleEditorProps)
           newShifts[day.dateStr] = activeCellLeaveMode;
         }
       });
+      saveShiftsToDB(empId, newShifts);
       return { ...emp, shifts: newShifts };
     }));
 
@@ -129,8 +137,16 @@ export function ScheduleEditor({ schedules, setSchedules }: ScheduleEditorProps)
           } else {
             newShifts[day.dateStr] = 'Вихідний';
           }
+        } else if (genTemplate === '2/2') {
+          const cycleDay = diffDays % 4;
+          if (cycleDay < 2) {
+            newShifts[day.dateStr] = genHours;
+          } else {
+            newShifts[day.dateStr] = 'Вихідний';
+          }
         }
       });
+      saveShiftsToDB(emp.id, newShifts);
       return { ...emp, shifts: newShifts };
     }));
     setGeneratorEmpId(null);

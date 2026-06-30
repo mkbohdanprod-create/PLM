@@ -51,6 +51,7 @@ export interface Order {
   isSubtask?: boolean; // For additional tasks like template nesting
   region: string;
   orderType: 'По кресленню' | 'З монтажем';
+  assignment_key?: string;
 
   // --- Нові поля з AppSheet / БД ---
   
@@ -125,6 +126,7 @@ export interface Order {
   impossibleComment?: string; // 85. Коментар не не можлив (Text)
   impossiblePhoto?: string; // 86. Фото не можливо оброб (Drawing)
   departurePoint?: string; // 87. Точка виїзду (Address)
+  shifts?: Record<string, string | null>;
 }
 
 export interface Measurer {

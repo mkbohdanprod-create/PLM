@@ -10,12 +10,12 @@ interface Message {
   timestamp: Date;
 }
 
-export function AIAssistantModule() {
+export function AIAssistantModule({ schedules = [] }: { schedules?: any[] }) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       role: 'assistant',
-      content: 'Привіт! Я ваш ШІ-асистент. Я маю доступ до бази даних PLM (замовлення, графіки, співробітники). Що б ви хотіли проаналізувати сьогодні?',
+      content: 'Привіт! Я ваш ШІ-асистент. Я маю доступ до бази замовлень та графіків роботи. Чим можу допомогти?',
       timestamp: new Date()
     }
   ]);
@@ -47,12 +47,6 @@ export function AIAssistantModule() {
     // Fetch limited context to not overflow AI token window
     try {
       const { data: orders } = await supabase.from('orders').select('id, client, address, status, order_type, time, area, material, region').limit(50);
-      
-      let schedules = [];
-      try {
-        const saved = localStorage.getItem('stoneplanner_schedules');
-        if (saved) schedules = JSON.parse(saved);
-      } catch (e) {}
       
       return `Context Data:
 Orders (last 50): ${JSON.stringify(orders)}

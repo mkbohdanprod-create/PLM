@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS employees (
   phone TEXT,
   telegram TEXT,
   status TEXT NOT NULL DEFAULT 'Працює',
+  shifts JSONB DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

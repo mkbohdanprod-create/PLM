@@ -57,6 +57,9 @@ CREATE TABLE orders (
   material TEXT,
   region TEXT,
   order_type TEXT,
+  assignment_key TEXT,
+  order_number TEXT,
+  created_at_field TEXT,
   is_subtask BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()

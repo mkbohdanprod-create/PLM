@@ -31,24 +31,10 @@ function App() {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   
   // Assignments: key is `${dateStr}_${measurerId}_${slotId}` or `eng_${engineerId}_${orderId}`
-  const [assignments, setAssignments] = useState<Record<string, Order>>(() => {
-    const saved = localStorage.getItem('stoneplanner_assignments');
-    return saved ? JSON.parse(saved) : {};
-  });
-
-  useEffect(() => {
-    localStorage.setItem('stoneplanner_assignments', JSON.stringify(assignments));
-  }, [assignments]);
+  const [assignments, setAssignments] = useState<Record<string, Order>>({});
   
-  // Schedules for employees (Persisted to localStorage for the prototype)
-  const [schedules, setSchedules] = useState<EmployeeSchedule[]>(() => {
-    const saved = localStorage.getItem('stoneplanner_schedules');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('stoneplanner_schedules', JSON.stringify(schedules));
-  }, [schedules]);
+  // Schedules for employees
+  const [schedules, setSchedules] = useState<EmployeeSchedule[]>([]);
 
   const [activeDragOrder, setActiveDragOrder] = useState<Order | null>(null);
   
@@ -128,6 +114,15 @@ function App() {
       if (!error && data) {
         setOrders(data as Order[]);
         if (data.length > 0 && !selectedOrder) setSelectedOrder(data[0] as Order);
+        
+        // Build assignments from Supabase data
+        const newAssignments: Record<string, Order> = {};
+        (data as Order[]).forEach(order => {
+          if (order.assignment_key) {
+            newAssignments[order.assignment_key] = order;
+          }
+        });
+        setAssignments(newAssignments);
       }
     };
 
@@ -154,15 +149,14 @@ function App() {
           }));
         setEngineers(loadedEngineers);
 
-        setSchedules(prev => {
-          const newSchedules = [...prev];
-          data.forEach(e => {
-            if (!newSchedules.find(s => s.id === e.id)) {
-              newSchedules.push({ id: e.id, name: e.name, role: e.role, shifts: {} });
-            }
-          });
-          return newSchedules;
-        });
+        // Build schedules from Supabase JSONB
+        const loadedSchedules = data.map(e => ({
+          id: e.id,
+          name: e.name,
+          role: e.role,
+          shifts: e.shifts || {}
+        }));
+        setSchedules(loadedSchedules);
       }
     };
 
@@ -285,6 +279,16 @@ function App() {
           dropId = `${baseDropId}_${orderToAssign.id}`;
         }
         
+        // Update Supabase
+        supabase.from('orders').update({ assignment_key: dropId }).eq('id', orderToAssign.id).then(({ error }) => {
+           if (error) console.error('Error updating assignment in Supabase:', error);
+        });
+
+        if (existingDropId) {
+            // Wait, if it moved, we don't need to clear the old order's assignment_key because it's the SAME order
+            // If we're dropping, we update THIS order's assignment_key. The old dropId is no longer associated with it.
+        }
+
         setAssignments(prev => {
            const copy = { ...prev };
            if (existingDropId) delete copy[existingDropId];
@@ -296,6 +300,13 @@ function App() {
   };
 
   const handleRemoveAssignment = (dropId: string) => {
+    const order = assignments[dropId];
+    if (order) {
+      supabase.from('orders').update({ assignment_key: null }).eq('id', order.id).then(({ error }) => {
+         if (error) console.error('Error removing assignment in Supabase:', error);
+      });
+    }
+
     setAssignments(prev => {
       const copy = { ...prev };
       delete copy[dropId];
@@ -509,7 +520,7 @@ function App() {
             </div>
           ) : activeModule === 'ШІ Аналітика' ? (
             <div style={{ height: '100%', overflow: 'auto', boxSizing: 'border-box' }}>
-              <AIAssistantModule />
+              <AIAssistantModule schedules={schedules} />
             </div>
           ) : activeModule === 'Графіки роботи' ? (
             <ScheduleEditor schedules={schedules} setSchedules={setSchedules} />
