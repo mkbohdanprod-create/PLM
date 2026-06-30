@@ -22,7 +22,15 @@ const INITIAL_EMPLOYEES: Employee[] = [
 ];
 
 export function EmployeesModule() {
-  const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
+  const [employees, setEmployees] = useState<Employee[]>(() => {
+    const saved = localStorage.getItem('stoneplanner_employees');
+    return saved ? JSON.parse(saved) : INITIAL_EMPLOYEES;
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('stoneplanner_employees', JSON.stringify(employees));
+  }, [employees]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('Всі');
   
