@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { DndContext, DragOverlay, closestCenter, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { Layers, UserCircle, Phone, User, MapPin, MoreVertical, ChevronRight, Moon, Sun, Check, Settings } from 'lucide-react';
-import { INITIAL_SCHEDULE } from './types';
 import type { Order, RouteInfo, EmployeeSchedule, Measurer, Engineer } from './types';
 import { OrderSidebar } from './components/OrderSidebar';
 import { EngineeringSidebar } from './components/EngineeringSidebar';
@@ -620,7 +619,7 @@ function App() {
 
                   <MapPanel 
                     orders={filteredOrders} 
-                    selectedOrder={selectedOrder} 
+                    selectedOrder={selectedOrder as Order} 
                     measurers={measurers}
                     routeInfos={routeInfos}
                     onSelectOrder={setSelectedOrder}
