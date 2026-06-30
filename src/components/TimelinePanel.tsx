@@ -153,14 +153,22 @@ export function TimelinePanel({ currentDate, onChangeDate, measurers, assignment
   const getDayShort = (d: Date) => d.toLocaleDateString('uk-UA', { weekday: 'short' }).toUpperCase();
   const getDayNum = (d: Date) => d.getDate();
 
+  const currentMonthName = currentDate.toLocaleDateString('uk-UA', { month: 'long', year: 'numeric' });
+  const formattedMonth = currentMonthName.charAt(0).toUpperCase() + currentMonthName.slice(1);
+
   return (
     <div className="panel timeline-panel" style={{ height: '420px', overflowY: 'auto' }}>
       <div className="panel-header" style={{ position: 'sticky', top: 0, zIndex: 10, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'stretch' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 className="panel-title">
-            <CalendarDays size={18} className="text-accent" />
-            Графік замірників
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <h2 className="panel-title" style={{ margin: 0 }}>
+              <CalendarDays size={18} className="text-accent" />
+              Графік замірників
+            </h2>
+            <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '4px 12px', borderRadius: '20px' }}>
+              {formattedMonth}
+            </span>
+          </div>
           
           <div className="tabs-container" style={{ margin: 0 }}>
             <button 
