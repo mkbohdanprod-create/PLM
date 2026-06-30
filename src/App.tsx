@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { DndContext, DragOverlay, closestCenter, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { Layers, UserCircle, Phone, User, MapPin, MoreVertical, ChevronRight, Moon, Sun, Check, Settings } from 'lucide-react';
-import { MOCK_ORDERS, MOCK_MEASURERS, MOCK_ENGINEERS, INITIAL_SCHEDULE } from './types';
-import type { Order, RouteInfo, EmployeeSchedule } from './types';
+import { INITIAL_SCHEDULE } from './types';
+import type { Order, RouteInfo, EmployeeSchedule, Measurer, Engineer } from './types';
 import { OrderSidebar } from './components/OrderSidebar';
 import { EngineeringSidebar } from './components/EngineeringSidebar';
 import { EngineeringBoard } from './components/EngineeringBoard';
@@ -23,8 +23,10 @@ import './index.css';
 
 function App() {
   const { profile, signOut } = useAuth();
-  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
-  const [selectedOrder, setSelectedOrder] = useState<Order>(MOCK_ORDERS[0]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [measurers, setMeasurers] = useState<Measurer[]>([]);
+  const [engineers, setEngineers] = useState<Engineer[]>([]);
   
   // Date State
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
@@ -42,7 +44,7 @@ function App() {
   // Schedules for employees (Persisted to localStorage for the prototype)
   const [schedules, setSchedules] = useState<EmployeeSchedule[]>(() => {
     const saved = localStorage.getItem('stoneplanner_schedules');
-    return saved ? JSON.parse(saved) : INITIAL_SCHEDULE;
+    return saved ? JSON.parse(saved) : [];
   });
 
   useEffect(() => {
@@ -126,36 +128,47 @@ function App() {
       const { data, error } = await supabase.from('orders').select('*');
       if (!error && data) {
         setOrders(data as Order[]);
-        if (data.length > 0) setSelectedOrder(data[0]);
+        if (data.length > 0 && !selectedOrder) setSelectedOrder(data[0] as Order);
+      }
+    };
 
-        if (data.length < 5) {
-          for (const order of MOCK_ORDERS) {
-            await supabase.from('orders').upsert({
-              id: order.id,
-              client: order.client,
-              address: order.address,
-              time: order.time,
-              status: order.status,
-              phone: order.phone || '',
-              area: order.area || '',
-              lat: order.lat,
-              lng: order.lng,
-              material: order.material,
-              region: order.region,
-              order_type: order.orderType || 'З монтажем',
-              is_subtask: order.isSubtask || false
-            }, { onConflict: 'id' });
-          }
-          const { data: newData } = await supabase.from('orders').select('*');
-          if (newData) {
-            setOrders(newData as Order[]);
-            setSelectedOrder(newData[0]);
-          }
-        }
+    const fetchEmployees = async () => {
+      const { data, error } = await supabase.from('employees').select('*');
+      if (!error && data) {
+        const loadedMeasurers: Measurer[] = data
+          .filter(e => e.role === 'Замірник')
+          .map((e, index) => ({
+            id: e.id,
+            name: e.name,
+            color: index % 2 === 0 ? '#10b981' : '#f59e0b'
+          }));
+        setMeasurers(loadedMeasurers);
+
+        const loadedEngineers: Engineer[] = data
+          .filter(e => e.role === 'Конструктор')
+          .map(e => ({
+            id: e.id,
+            name: e.name,
+            specialty: e.rank || 'Спеціаліст',
+            pool: e.sub_role || 'Конструктив',
+            completedSqmThisMonth: 0
+          }));
+        setEngineers(loadedEngineers);
+
+        setSchedules(prev => {
+          const newSchedules = [...prev];
+          data.forEach(e => {
+            if (!newSchedules.find(s => s.id === e.id)) {
+              newSchedules.push({ id: e.id, name: e.name, role: e.role, shifts: {} });
+            }
+          });
+          return newSchedules;
+        });
       }
     };
 
     fetchOrders();
+    fetchEmployees();
 
     // Subscribe to realtime changes
     const subscription = supabase.channel('public:orders')
@@ -174,7 +187,7 @@ function App() {
     async function fetchRoutes() {
       const newRoutes: Record<string, RouteInfo> = {};
       
-      for (const measurer of MOCK_MEASURERS) {
+      for (const measurer of measurers) {
         // Find all orders assigned to this measurer on this date, ordered by slot
         const timeSlots = ['09:00', '12:00', '15:00', '18:00'];
         const assignedOrders = timeSlots
@@ -208,7 +221,7 @@ function App() {
       }
       setOrders(prev => prev.filter(o => o.id !== orderId));
       if (selectedOrder?.id === orderId) {
-        setSelectedOrder(orders.find(o => o.id !== orderId) || MOCK_ORDERS[0]);
+        setSelectedOrder(orders.find(o => o.id !== orderId) || (orders.length > 0 ? orders[0] : null));
       }
       // Clean up assignments
       const newAssignments = { ...assignments };
@@ -470,7 +483,7 @@ function App() {
           ) : (activeModule === 'Моніторинг замовлень' || activeModule === 'Графіки роботи' || activeModule === 'Розрахунок ЗП' || activeModule === 'Співробітники') ? null : (
             <OrderSidebar 
               orders={availableOrders} 
-              selectedOrder={selectedOrder} 
+              selectedOrder={selectedOrder as Order} 
               onSelectOrder={setSelectedOrder} 
               onAddOrder={(newOrder) => {
                 const updatedOrders = [newOrder, ...orders];
@@ -507,7 +520,7 @@ function App() {
             </div>
           ) : activeModule === 'Конструктив' ? (
             <EngineeringBoard 
-              engineers={MOCK_ENGINEERS}
+              engineers={engineers}
               assignments={assignments}
               onRemoveAssignment={handleRemoveAssignment}
               activePool={engineeringPool}
@@ -518,7 +531,7 @@ function App() {
               <TimelinePanel 
                   currentDate={currentDate}
                   onChangeDate={setCurrentDate}
-                  measurers={MOCK_MEASURERS}
+                  measurers={measurers}
                   assignments={timelineAssignments} 
                   onRemoveAssignment={handleRemoveAssignment} 
                   routeInfos={routeInfos}
@@ -535,7 +548,7 @@ function App() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
                         <div style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '4px' }}>Картка замовлення</div>
-                        <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>{selectedOrder?.id || 'Оберіть замовлення'}</h2>
+                        <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>{selectedOrder ? selectedOrder.id : 'Оберіть замовлення'}</h2>
                       </div>
                       <button style={{ padding: '6px' }}><MoreVertical size={16} /></button>
                     </div>
@@ -556,16 +569,16 @@ function App() {
                       <div style={{ gridColumn: '1 / -1' }}>
                         <div className="detail-label">Адреса об'єкта</div>
                         <div className="detail-value">
-                          <MapPin size={14} className="text-accent" /> {selectedOrder.address}
+                          <MapPin size={14} className="text-accent" /> {selectedOrder?.address || '-'}
                         </div>
                       </div>
                       <div>
                         <div className="detail-label">Площа виробів</div>
-                        <div className="detail-value">{selectedOrder.area}</div>
+                        <div className="detail-value">{selectedOrder?.area || '-'}</div>
                       </div>
                       <div>
                         <div className="detail-label">Бажаний час</div>
-                        <div className="detail-value">{selectedOrder.time}</div>
+                        <div className="detail-value">{selectedOrder?.time || '-'}</div>
                       </div>
                     </div>
 
@@ -575,9 +588,10 @@ function App() {
                         <ChevronRight size={16} />
                       </button>
                       
-                      {assignedOrderIds.includes(selectedOrder.id) && !lockedAssignments[selectedOrder.id] && (
+                      {selectedOrder && assignedOrderIds.includes(selectedOrder.id) && !lockedAssignments[selectedOrder.id] && (
                         <button 
                           onClick={() => {
+                            if (!selectedOrder) return;
                             setLockedAssignments(prev => ({...prev, [selectedOrder.id]: true}));
                             alert('Замір зафіксовано!\n\nВідправлено повідомлення в Telegram замірнику.\nЗамовлення з\'явиться в його робочому столі "Заміри".');
                           }}
@@ -586,17 +600,17 @@ function App() {
                           Зафіксувати замір
                         </button>
                       )}
-                      {lockedAssignments[selectedOrder.id] && (
+                      {selectedOrder && lockedAssignments[selectedOrder.id] && (
                         <div style={{ padding: '10px 16px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success-color)', borderRadius: '4px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <Check size={16} /> Зафіксовано
                         </div>
                       )}
                       
-                      {!assignedOrderIds.includes(selectedOrder.id) && (
+                      {selectedOrder && !assignedOrderIds.includes(selectedOrder.id) && (
                         <div style={{ fontSize: '10px', color: 'red' }}>Debug: Not assigned. ID: {selectedOrder.id}, All: {assignedOrderIds.join(', ')}</div>
                       )}
 
-                      {selectedOrder.status !== 'PAUSED' && (
+                      {selectedOrder && selectedOrder.status !== 'PAUSED' && (
                         <button style={{ color: 'var(--warning-color)', borderColor: 'var(--warning-color)', background: 'transparent' }}>
                           На паузу
                         </button>
@@ -607,7 +621,7 @@ function App() {
                   <MapPanel 
                     orders={filteredOrders} 
                     selectedOrder={selectedOrder} 
-                    measurers={MOCK_MEASURERS}
+                    measurers={measurers}
                     routeInfos={routeInfos}
                     onSelectOrder={setSelectedOrder}
                   />

@@ -13,14 +13,7 @@ interface Employee {
   status: 'Працює' | 'У відпустці' | 'Лікарняний' | 'Звільнений';
 }
 
-const INITIAL_EMPLOYEES: Employee[] = [
-  { id: '1', name: 'Олексій', role: 'Оператор', rank: 'Старший спеціаліст', phone: '+380 50 123 45 67', telegram: '@oleksiy_disp', status: 'Працює' },
-  { id: '2', name: 'Марія', role: 'Оператор', rank: 'Спеціаліст', phone: '+380 67 123 45 67', telegram: '@mariya_disp', status: 'Працює' },
-  { id: '3', name: 'Іван', role: 'Замірник', rank: 'Стажер', phone: '+380 63 987 65 43', telegram: '@ivan_zamir', status: 'Лікарняний' },
-  { id: '4', name: 'Петро', role: 'Замірник', rank: 'Старший спеціаліст', phone: '+380 97 111 22 33', telegram: '@petro_zam', status: 'Працює' },
-  { id: '5', name: 'Андрій', role: 'Конструктор', subRole: 'Технолог', rank: 'Керівник', phone: '+380 50 555 66 77', telegram: '@andriy_cad', status: 'У відпустці' },
-  { id: '6', name: 'Віктор', role: 'Монтажник', rank: 'Спеціаліст', phone: '+380 67 999 88 77', telegram: '@viktor_montazh', status: 'Працює' }
-];
+
 
 export function EmployeesModule() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -30,7 +23,7 @@ export function EmployeesModule() {
       const { data, error } = await supabase.from('employees').select('*');
       if (error) {
         console.error('Error fetching employees', error);
-      } else if (data && data.length > 0) {
+      } else if (data) {
         const fetched: Employee[] = data.map(d => ({
           id: d.id,
           name: d.name,
@@ -42,21 +35,6 @@ export function EmployeesModule() {
           status: d.status
         }));
         setEmployees(fetched);
-      } else {
-        // Seed initial employees
-        for (const emp of INITIAL_EMPLOYEES) {
-          await supabase.from('employees').upsert({
-            id: emp.id,
-            name: emp.name,
-            role: emp.role,
-            sub_role: emp.subRole || null,
-            rank: emp.rank || null,
-            phone: emp.phone,
-            telegram: emp.telegram,
-            status: emp.status
-          });
-        }
-        setEmployees(INITIAL_EMPLOYEES);
       }
     };
     fetchEmployees();
