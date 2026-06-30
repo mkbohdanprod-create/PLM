@@ -473,7 +473,7 @@ function App() {
           {activeModule === 'Конструктив' ? (
             <EngineeringSidebar 
               orders={availableOrders} 
-              selectedOrder={selectedOrder} 
+              selectedOrder={selectedOrder as Order} 
               onSelectOrder={setSelectedOrder} 
               activePool={engineeringPool}
               onAddOrder={(newOrder) => setOrders(prev => [...prev, newOrder])}
