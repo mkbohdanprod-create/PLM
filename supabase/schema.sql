@@ -84,8 +84,8 @@ CREATE POLICY "Roles editable by everyone" ON roles FOR ALL USING (auth.role() =
 
 -- Allow users to read all profiles
 CREATE POLICY "Profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
--- Only admins can update profiles (for now, allow users to update their own)
-CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+-- Allow editing profiles so roles can be assigned in the app
+CREATE POLICY "Profiles editable by everyone" ON profiles FOR ALL USING (auth.role() = 'authenticated');
 
 -- Orders RLS (Basic: everyone authenticated can see and edit for now)
 CREATE POLICY "Orders are viewable by authenticated users" ON orders FOR SELECT USING (auth.role() = 'authenticated');

@@ -25,22 +25,36 @@ interface Role {
   allowed_modules: string[];
 }
 
+interface Profile {
+  id: string;
+  name: string;
+  role_id: string | null;
+}
+
 export function RolesModule() {
   const [roles, setRoles] = useState<Role[]>([]);
+  const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [newRoleName, setNewRoleName] = useState('');
 
   useEffect(() => {
-    fetchRoles();
+    fetchData();
   }, []);
 
-  const fetchRoles = async () => {
+  const fetchData = async () => {
     try {
-      const { data, error } = await supabase.from('roles').select('*').order('created_at');
-      if (error) throw error;
-      setRoles(data || []);
+      const [rolesRes, usersRes] = await Promise.all([
+        supabase.from('roles').select('*').order('created_at'),
+        supabase.from('profiles').select('*').order('created_at')
+      ]);
+      
+      if (rolesRes.error) throw rolesRes.error;
+      if (usersRes.error) throw usersRes.error;
+      
+      setRoles(rolesRes.data || []);
+      setUsers(usersRes.data || []);
     } catch (err) {
-      console.error('Error fetching roles:', err);
+      console.error('Error fetching data:', err);
     } finally {
       setLoading(false);
     }
@@ -54,7 +68,7 @@ export function RolesModule() {
       ]);
       if (error) throw error;
       setNewRoleName('');
-      fetchRoles();
+      fetchData();
     } catch (err) {
       console.error('Error creating role:', err);
       alert('Помилка при створенні ролі');
@@ -66,7 +80,7 @@ export function RolesModule() {
     try {
       const { error } = await supabase.from('roles').delete().eq('id', id);
       if (error) throw error;
-      fetchRoles();
+      fetchData();
     } catch (err) {
       console.error('Error deleting role:', err);
       alert('Помилка при видаленні');
@@ -92,6 +106,18 @@ export function RolesModule() {
     } catch (err) {
       console.error('Error updating role:', err);
       alert('Помилка при збереженні');
+    }
+  };
+
+  const handleUserRoleChange = async (userId: string, newRoleId: string) => {
+    try {
+      const roleIdToSet = newRoleId === '' ? null : newRoleId;
+      const { error } = await supabase.from('profiles').update({ role_id: roleIdToSet }).eq('id', userId);
+      if (error) throw error;
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role_id: roleIdToSet } : u));
+    } catch (err) {
+      console.error('Error updating user role:', err);
+      alert('Помилка при призначенні ролі');
     }
   };
 
@@ -149,6 +175,33 @@ export function RolesModule() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Список користувачів */}
+        <div style={{ flex: 1, background: 'var(--bg-panel)', padding: '24px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <h2 style={{ margin: '0 0 24px 0', fontSize: '18px', fontWeight: 600 }}>Користувачі системи</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {users.map(user => (
+              <div key={user.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '6px', background: 'var(--bg-secondary)' }}>
+                <span style={{ fontWeight: 500, fontSize: '14px' }}>{user.name}</span>
+                <select 
+                  value={user.role_id || ''} 
+                  onChange={(e) => handleUserRoleChange(user.id, e.target.value)}
+                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-panel)', color: 'var(--text-primary)', cursor: 'pointer', outline: 'none' }}
+                >
+                  <option value="" disabled>Оберіть роль...</option>
+                  {roles.map(r => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+            {users.length === 0 && (
+              <div style={{ color: 'var(--text-secondary)', fontSize: '14px', textAlign: 'center', padding: '20px' }}>
+                Немає зареєстрованих користувачів
+              </div>
+            )}
           </div>
         </div>
       </div>
