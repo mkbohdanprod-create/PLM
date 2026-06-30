@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { Search, MapPin, Clock } from 'lucide-react';
+import { Search, MapPin, Clock, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { STATUS_LABELS } from '../types';
 import { CreateOrderModal } from './CreateOrderModal';
@@ -10,9 +10,10 @@ export interface OrderCardProps {
   order: Order;
   isSelected: boolean;
   onSelect: (order: Order) => void;
+  onDelete?: (orderId: string) => void;
 }
 
-export function DraggableOrderCard({ order, isSelected, onSelect }: OrderCardProps) {
+export function DraggableOrderCard({ order, isSelected, onSelect, onDelete }: OrderCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: order.id,
     data: order
@@ -43,9 +44,20 @@ export function DraggableOrderCard({ order, isSelected, onSelect }: OrderCardPro
     >
       <div className="order-meta">
         <span className="order-id">{order.id}</span>
-        <span className={`badge ${badgeClass}`}>
-          {STATUS_LABELS[order.status] || order.status}
-        </span>
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          <span className={`badge ${badgeClass}`}>
+            {STATUS_LABELS[order.status] || order.status}
+          </span>
+          {onDelete && (
+            <button 
+              onClick={(e) => { e.stopPropagation(); onDelete(order.id); }}
+              style={{ background: 'transparent', border: 'none', color: 'var(--danger-color)', cursor: 'pointer', padding: '2px' }}
+              title="Видалити замовлення"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
       <div className="order-client">{order.client}</div>
       <div className="order-detail-row">
@@ -63,9 +75,10 @@ export interface OrderSidebarProps {
   selectedOrder: Order | null;
   onSelectOrder: (order: Order) => void;
   onAddOrder?: (order: Order) => void;
+  onDeleteOrder?: (orderId: string) => void;
 }
 
-export function OrderSidebar({ orders, selectedOrder, onSelectOrder, onAddOrder }: OrderSidebarProps) {
+export function OrderSidebar({ orders, selectedOrder, onSelectOrder, onAddOrder, onDeleteOrder }: OrderSidebarProps) {
   const [activeTab, setActiveTab] = useState<OrderStatus | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -138,6 +151,7 @@ export function OrderSidebar({ orders, selectedOrder, onSelectOrder, onAddOrder 
               order={order} 
               isSelected={selectedOrder?.id === order.id}
               onSelect={onSelectOrder}
+              onDelete={onDeleteOrder}
             />
           ))
         )}

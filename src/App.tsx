@@ -197,6 +197,34 @@ function App() {
     }
   }, [assignments, dateStr, activeModule]);
 
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!window.confirm('Ви дійсно хочете видалити це замовлення?')) return;
+    try {
+      const { error } = await supabase.from('orders').delete().eq('id', orderId);
+      if (error) {
+        console.error('Failed to delete order', error);
+        alert('Помилка при видаленні замовлення');
+        return;
+      }
+      setOrders(prev => prev.filter(o => o.id !== orderId));
+      if (selectedOrder?.id === orderId) {
+        setSelectedOrder(orders.find(o => o.id !== orderId) || MOCK_ORDERS[0]);
+      }
+      // Clean up assignments
+      const newAssignments = { ...assignments };
+      let assignmentChanged = false;
+      Object.keys(newAssignments).forEach(key => {
+        if (newAssignments[key]?.id === orderId) {
+          delete newAssignments[key];
+          assignmentChanged = true;
+        }
+      });
+      if (assignmentChanged) setAssignments(newAssignments);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     setTheme(newTheme);
@@ -437,6 +465,7 @@ function App() {
               onSelectOrder={setSelectedOrder} 
               activePool={engineeringPool}
               onAddOrder={(newOrder) => setOrders(prev => [...prev, newOrder])}
+              onDeleteOrder={handleDeleteOrder}
             />
           ) : (activeModule === 'Моніторинг замовлень' || activeModule === 'Графіки роботи' || activeModule === 'Розрахунок ЗП' || activeModule === 'Співробітники') ? null : (
             <OrderSidebar 
@@ -448,6 +477,7 @@ function App() {
                 setOrders(updatedOrders);
                 setSelectedOrder(newOrder);
               }}
+              onDeleteOrder={handleDeleteOrder}
             />
           )}
 

@@ -10,9 +10,10 @@ interface EngineeringSidebarProps {
   onSelectOrder: (order: Order) => void;
   activePool?: string;
   onAddOrder?: (order: Order) => void;
+  onDeleteOrder?: (orderId: string) => void;
 }
 
-export function EngineeringSidebar({ orders, selectedOrder, onSelectOrder, activePool, onAddOrder }: EngineeringSidebarProps) {
+export function EngineeringSidebar({ orders, selectedOrder, onSelectOrder, activePool, onAddOrder, onDeleteOrder }: EngineeringSidebarProps) {
   const [filterType, setFilterType] = useState<'new' | 'paused' | 'subtasks'>('new');
   const [isCreating, setIsCreating] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -147,6 +148,7 @@ export function EngineeringSidebar({ orders, selectedOrder, onSelectOrder, activ
               order={order} 
               isSelected={selectedOrder.id === order.id}
               onSelect={onSelectOrder}
+              onDelete={onDeleteOrder}
             />
           ))
         )}
