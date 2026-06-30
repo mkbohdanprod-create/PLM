@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Edit2, Search, Filter, Trash2, CheckCircle2, X } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface Employee {
   id: string;
@@ -22,14 +23,44 @@ const INITIAL_EMPLOYEES: Employee[] = [
 ];
 
 export function EmployeesModule() {
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    const saved = localStorage.getItem('stoneplanner_employees');
-    return saved ? JSON.parse(saved) : INITIAL_EMPLOYEES;
-  });
+  const [employees, setEmployees] = useState<Employee[]>([]);
 
   React.useEffect(() => {
-    localStorage.setItem('stoneplanner_employees', JSON.stringify(employees));
-  }, [employees]);
+    const fetchEmployees = async () => {
+      const { data, error } = await supabase.from('employees').select('*');
+      if (error) {
+        console.error('Error fetching employees', error);
+      } else if (data && data.length > 0) {
+        const fetched: Employee[] = data.map(d => ({
+          id: d.id,
+          name: d.name,
+          role: d.role,
+          subRole: d.sub_role,
+          rank: d.rank,
+          phone: d.phone,
+          telegram: d.telegram,
+          status: d.status
+        }));
+        setEmployees(fetched);
+      } else {
+        // Seed initial employees
+        for (const emp of INITIAL_EMPLOYEES) {
+          await supabase.from('employees').upsert({
+            id: emp.id,
+            name: emp.name,
+            role: emp.role,
+            sub_role: emp.subRole || null,
+            rank: emp.rank || null,
+            phone: emp.phone,
+            telegram: emp.telegram,
+            status: emp.status
+          });
+        }
+        setEmployees(INITIAL_EMPLOYEES);
+      }
+    };
+    fetchEmployees();
+  }, []);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('Всі');
@@ -64,24 +95,48 @@ export function EmployeesModule() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Ви впевнені, що хочете видалити цього співробітника?')) {
-      setEmployees(prev => prev.filter(e => e.id !== id));
+      const { error } = await supabase.from('employees').delete().eq('id', id);
+      if (!error) {
+        setEmployees(prev => prev.filter(e => e.id !== id));
+      } else {
+        alert('Помилка видалення');
+        console.error(error);
+      }
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingEmp) return;
     
-    setEmployees(prev => {
-      const exists = prev.find(e => e.id === editingEmp.id);
-      if (exists) {
-        return prev.map(e => e.id === editingEmp.id ? editingEmp : e);
-      } else {
-        return [...prev, editingEmp];
-      }
-    });
-    setIsModalOpen(false);
+    const dbEmp = {
+      id: editingEmp.id,
+      name: editingEmp.name,
+      role: editingEmp.role,
+      sub_role: editingEmp.subRole || null,
+      rank: editingEmp.rank || null,
+      phone: editingEmp.phone,
+      telegram: editingEmp.telegram,
+      status: editingEmp.status
+    };
+
+    const { error } = await supabase.from('employees').upsert(dbEmp);
+    
+    if (!error) {
+      setEmployees(prev => {
+        const exists = prev.find(e => e.id === editingEmp.id);
+        if (exists) {
+          return prev.map(e => e.id === editingEmp.id ? editingEmp : e);
+        } else {
+          return [...prev, editingEmp];
+        }
+      });
+      setIsModalOpen(false);
+    } else {
+      console.error(error);
+      alert('Помилка збереження');
+    }
   };
 
   const getStatusColor = (status: string) => {
